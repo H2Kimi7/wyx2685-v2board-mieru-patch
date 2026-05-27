@@ -18,6 +18,7 @@ It was derived by comparing `cedar2025/Xboard` Mieru support with the wyx2685 V2
   - `/api/v1/server/uniproxy/user?node_type=mieru&node_id=ID&token=SERVER_TOKEN`
   - `/api/v1/server/uniproxy/push?node_type=mieru&node_id=ID&token=SERVER_TOKEN`
 - Clash Meta, Clash Verge, and Clash Nyanpasu subscription output:
+- Compiled admin frontend patch for `public/assets/admin/umi.js`, so Mieru appears in the node create menu, table filter, and edit/action dispatch.
 
 ```yaml
 name: example
@@ -45,9 +46,9 @@ APP_DIR=/www/wwwroot/v2board bash <(curl -fsSL https://raw.githubusercontent.com
 
 The script will:
 
-- Download `patches/wyx2685-mieru-support.patch` from GitHub.
+- Download `patches/wyx2685-mieru-support.patch` and `patches/wyx2685-mieru-frontend-supplement.patch` from GitHub.
 - Back up every touched file under `storage/backups/mieru-patch-*`.
-- Apply the code patch with a dry-run check first.
+- Apply the code patch with a dry-run check first. If you already installed the earlier backend-only patch, it automatically falls back to the frontend supplement patch.
 - Create `v2_server_mieru` with `CREATE TABLE IF NOT EXISTS`.
 - Clear Laravel config/cache if `artisan` is available.
 
@@ -57,11 +58,11 @@ Set `SKIP_DB=1` to skip database changes:
 SKIP_DB=1 APP_DIR=/www/wwwroot/v2board bash <(curl -fsSL https://raw.githubusercontent.com/H2Kimi7/wyx2685-v2board-mieru-patch/main/scripts/install-mieru.sh)
 ```
 
-## Important Limitation
+## Frontend Note
 
-This patch does not modify the compiled admin frontend asset `public/assets/admin/umi.js`.
+The repository does not contain original admin frontend source, only the compiled `public/assets/admin/umi.js`. This patch modifies that compiled asset directly.
 
-The backend API can create and manage Mieru nodes, but the existing admin UI will not automatically show a dedicated Mieru form unless you rebuild or patch the frontend separately.
+Mieru now appears in the node create menu. The temporary form reuses the AnyTLS-style base node form and submits Mieru with `transport=TCP` by default. Advanced Mieru-only fields such as `traffic_pattern` still require direct API calls or a future proper frontend source rebuild.
 
 ## Mieru Node Fields
 
@@ -73,7 +74,7 @@ Required fields for `server/mieru/save`:
 - `port`
 - `server_port`
 - `rate`
-- `transport`: `TCP` or `UDP`
+- `transport`: `TCP` or `UDP`; omitted values default to `TCP`
 
 Optional fields:
 

@@ -5,10 +5,12 @@ REPO="${REPO:-H2Kimi7/wyx2685-v2board-mieru-patch}"
 BRANCH="${BRANCH:-main}"
 RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com/${REPO}/${BRANCH}}"
 PATCH_URL="${PATCH_URL:-${RAW_BASE}/patches/wyx2685-mieru-support.patch}"
+SUPPLEMENT_PATCH_URL="${SUPPLEMENT_PATCH_URL:-${RAW_BASE}/patches/wyx2685-mieru-frontend-supplement.patch}"
 APP_DIR="${APP_DIR:-$(pwd)}"
 BACKUP_ROOT="${BACKUP_ROOT:-}"
 SKIP_DB="${SKIP_DB:-0}"
 TMP_PATCH=""
+TMP_SUPPLEMENT_PATCH=""
 
 log() {
   printf '[mieru-patch] %s\n' "$*"
@@ -69,9 +71,10 @@ install_os_packages_if_needed() {
 }
 
 download_patch() {
-  local tmp_patch="$1"
-  log "Downloading patch from ${PATCH_URL}"
-  curl -fsSL "$PATCH_URL" -o "$tmp_patch"
+  local url="$1"
+  local tmp_patch="$2"
+  log "Downloading patch from ${url}"
+  curl -fsSL "$url" -o "$tmp_patch"
   [[ -s "$tmp_patch" ]] || fail "Downloaded patch is empty"
 }
 
@@ -103,21 +106,37 @@ backup_files() {
   rm -f /tmp/mieru-patch-files.$$
 }
 
-apply_code_patch() {
+apply_patch_file() {
   local patch_file="$1"
+  local label="$2"
+  local allow_reversed_skip="${3:-0}"
   cd "$APP_DIR"
   if patch --dry-run -p0 < "$patch_file" >/tmp/mieru-patch-dry-run.log 2>&1; then
-    log "Applying code patch"
+    log "Applying ${label}"
     patch -p0 < "$patch_file"
     return
   fi
 
-  if grep -q 'Reversed (or previously applied) patch detected' /tmp/mieru-patch-dry-run.log; then
-    log "Patch appears to be already applied; skipping code patch"
+  if [[ "$allow_reversed_skip" == "1" ]] && grep -q 'Reversed (or previously applied) patch detected' /tmp/mieru-patch-dry-run.log; then
+    log "${label} appears to be already applied; skipping"
     return
   fi
 
-  cat /tmp/mieru-patch-dry-run.log >&2
+  return 1
+}
+
+apply_code_patch() {
+  local full_patch="$1"
+  local supplement_patch="$2"
+  if apply_patch_file "$full_patch" "full Mieru patch" 0; then
+    return
+  fi
+
+  log "Full patch did not apply cleanly; trying frontend supplement for an existing backend-patched install"
+  if apply_patch_file "$supplement_patch" "frontend supplement patch" 1; then
+    return
+  fi
+
   fail "Patch dry-run failed. Your local files may differ from the expected wyx2685 version."
 }
 
@@ -193,11 +212,13 @@ main() {
   fi
 
   TMP_PATCH="$(mktemp)"
-  trap 'rm -f "$TMP_PATCH" /tmp/mieru-patch-dry-run.log' EXIT
+  TMP_SUPPLEMENT_PATCH="$(mktemp)"
+  trap 'rm -f "$TMP_PATCH" "$TMP_SUPPLEMENT_PATCH" /tmp/mieru-patch-dry-run.log' EXIT
 
-  download_patch "$TMP_PATCH"
+  download_patch "$PATCH_URL" "$TMP_PATCH"
+  download_patch "$SUPPLEMENT_PATCH_URL" "$TMP_SUPPLEMENT_PATCH"
   backup_files "$TMP_PATCH"
-  apply_code_patch "$TMP_PATCH"
+  apply_code_patch "$TMP_PATCH" "$TMP_SUPPLEMENT_PATCH"
   run_database_migration
   clear_cache
 
@@ -205,7 +226,7 @@ main() {
   log "Mieru admin API: /api/v1/{secure_path}/server/mieru/save"
   log "Mieru node API: /api/v1/server/uniproxy/config?node_type=mieru&node_id=ID&token=SERVER_TOKEN"
   log "Backup path: ${BACKUP_ROOT}"
-  log "Note: this patch adds backend support; the compiled admin frontend still needs a custom form or direct API calls."
+  log "The compiled admin frontend has been patched to show Mieru in the node create menu."
 }
 
 main "$@"
